@@ -62,6 +62,7 @@ def archive_account(
         for page_number in range(max_pages):
             if page_number:
                 sleeper(interval)
+            report(f"正在读取历史列表第 {page_number + 1} 页…")
             page = backend.history(account, state["next_offset"])
             if total_records is None:
                 total_records = page.total_records

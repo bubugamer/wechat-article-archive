@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wechat-article-archive"
-version = "0.1.0"
+version = "0.2.0"
 description = "Archive original WeChat articles and paginate public-account history with a local login."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [{name = "bubugamer"}]
-dependencies = ["requests>=2.32,<3", "beautifulsoup4>=4.12,<5", "markdownify>=1,<2"]
+dependencies = ["requests>=2.32,<3", "beautifulsoup4>=4.12,<5", "markdownify>=1,<2", "qrcode[pil]>=8,<9"]
 
 [project.optional-dependencies]
 login = ["playwright>=1.50,<2"]
@@ -24,6 +24,9 @@ Repository = "https://github.com/bubugamer/wechat-article-archive"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+wechat_archive = ["*.mjs"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

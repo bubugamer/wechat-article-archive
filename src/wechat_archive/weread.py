@@ -11,7 +11,13 @@ import subprocess
 import time
 
 from .accounts import Account, HistoryPage
-from .errors import ArchiveError, SessionExpired, UnexpectedResponse
+from .errors import (
+    ArchiveError,
+    RateLimited,
+    SessionExpired,
+    UnexpectedResponse,
+    VerificationRequired,
+)
 from .urls import article_url
 
 
@@ -25,9 +31,10 @@ def executable() -> str:
     return candidate
 
 
-def login_personal() -> int:
-    # No shell, no browser-cookie extraction, no credentials passed on the command line.
-    return subprocess.call([executable(), "login"])
+def login_personal(*, open_browser=True, timeout=300, qr_output=None) -> int:
+    from .login_ui import qr_login
+
+    return qr_login(executable(), open_browser=open_browser, timeout=timeout, qr_output=qr_output)
 
 
 class WeReadClient:
@@ -49,9 +56,34 @@ class WeReadClient:
             raise ArchiveError("微信读书客户端无法运行或请求超时，进度已保留。") from None
         if result.returncode:
             # Never echo upstream stderr: it may contain local paths or session diagnostics.
-            raise SessionExpired(
-                "微信读书请求失败，请先运行 weread-omni doctor --json 检查登录与访问限制；"
-                "必要时重新运行 wechat-archive login。不会将此情况视为历史列表结束。"
+            try:
+                error = json.loads(result.stderr)
+            except (TypeError, ValueError):
+                error = {}
+            message = str(error.get("error", "")) if isinstance(error, dict) else ""
+            if not isinstance(error, dict):
+                error = {}
+            if error.get("errCode") == -2041 or error.get("status") == 499:
+                raise VerificationRequired("微信读书要求人工验证，请在官方客户端处理后重试。")
+            if error.get("status") == 429:
+                raise RateLimited("微信读书限制了请求频率，请稍后重试，无需重新扫码。")
+            if (
+                error.get("status") == 401
+                or error.get("errCode") == -2012
+                or any(
+                    x in message
+                    for x in (
+                        "no WeRead accounts",
+                        "no credentials",
+                        "not logged in",
+                        "credentials not found",
+                    )
+                )
+            ):
+                raise SessionExpired("尚未登录或登录已失效，请运行 wechat-archive start 扫码登录。")
+            raise ArchiveError(
+                "微信读书请求失败，请运行 weread-omni doctor --json 检查网络或访问权限。"
+                "未将此情况视为登录失效或历史列表结束。"
             )
         try:
             data = json.loads(result.stdout)
@@ -60,6 +92,19 @@ class WeReadClient:
         if not isinstance(data, dict):
             raise UnexpectedResponse("微信读书客户端返回格式已改变。")
         return data
+
+    def ensure_login(self, *, auto=True, open_browser=True, timeout=300):
+        try:
+            result = self._call("doctor")
+        except SessionExpired:
+            if not auto:
+                raise
+            from .login_ui import qr_login
+
+            qr_login(self.binary, open_browser=open_browser, timeout=timeout)
+            result = self._call("doctor")
+        if result.get("ok") is not True:
+            raise UnexpectedResponse("未能确认微信读书登录可用，没有继续读取公众号。")
 
     def search(self, query: str) -> list[Account]:
         found = {}

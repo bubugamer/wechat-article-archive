@@ -39,13 +39,24 @@ def parser() -> argparse.ArgumentParser:
     auth = commands.add_parser("login", help="普通微信扫码登录；可选公众号后台方式")
     auth.add_argument("--provider", choices=["weread", "backend"], default="weread")
     auth.add_argument("--session", type=Path, default=default_session_path())
-    for name, help_text in (("search", "搜索公众号"), ("account", "遍历公众号可见历史并下载原文")):
+    auth.add_argument("--no-browser", action="store_true", help="只显示本机扫码页面地址")
+    auth.add_argument("--timeout", type=positive, default=300, help="等待扫码的最长秒数")
+    auth.add_argument("--qr-output", type=Path, help="临时二维码 PNG，登录结束后自动删除")
+    for name, help_text in (
+        ("search", "搜索公众号"),
+        ("account", "遍历公众号可见历史并下载原文"),
+        ("start", "启动：检查登录，必要时显示扫码窗口，再归档公众号"),
+    ):
         sub = commands.add_parser(name, help=help_text)
-        sub.add_argument("name")
+        sub.add_argument("name", nargs="?" if name == "start" else None)
         sub.add_argument("--provider", choices=["weread", "backend"], default="weread")
         sub.add_argument("--session", type=Path, default=default_session_path())
         sub.add_argument("--json", action="store_true")
-        if name == "account":
+        sub.add_argument(
+            "--no-login", action="store_true", help="登录失效时直接报错，不打开扫码窗口"
+        )
+        sub.add_argument("--no-browser", action="store_true", help="仅显示本机扫码页面地址")
+        if name != "search":
             sub.add_argument("--account-id", help="同名公众号的精确身份标识，先用 search 查询")
             sub.add_argument(
                 "--all", action="store_true", help="遍历当前来源可见的全部历史（默认行为）"
@@ -59,11 +70,14 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = parser().parse_args(argv)
+    supplied = list(sys.argv[1:] if argv is None else argv)
+    args = parser().parse_args(supplied or ["start"])
     try:
         if args.command == "login":
             if args.provider == "weread":
-                return login_personal()
+                return login_personal(
+                    open_browser=not args.no_browser, timeout=args.timeout, qr_output=args.qr_output
+                )
             login(args.session)
             print(f"公众号后台登录状态已保存至本机：{args.session}")
             return 0
@@ -100,6 +114,22 @@ def main(argv: list[str] | None = None) -> int:
             if args.provider == "weread"
             else BackendClient(load_session(args.session))
         )
+        interactive_login = (
+            args.provider == "weread"
+            and not args.no_login
+            and not args.json
+            and (args.command == "start" or sys.stdin.isatty())
+        )
+        if interactive_login:
+            backend.ensure_login(open_browser=not args.no_browser)
+        if not args.name:
+            if not sys.stdin.isatty():
+                raise ArchiveError("请用 wechat-archive start '公众号名称' 指定目标。")
+            args.name = input("请输入公众号名称：").strip()
+            if not args.name:
+                raise ArchiveError("未输入公众号名称，没有开始读取。")
+        if not args.json:
+            print(f"正在查找公众号：{args.name}…", flush=True)
         candidates = backend.search(args.name)
         if args.command == "search":
             if args.json:

@@ -5,7 +5,13 @@ from unittest.mock import Mock
 import pytest
 
 from wechat_archive.accounts import Account
-from wechat_archive.errors import SessionExpired, UnexpectedResponse
+from wechat_archive.errors import (
+    ArchiveError,
+    RateLimited,
+    SessionExpired,
+    UnexpectedResponse,
+    VerificationRequired,
+)
 from wechat_archive.weread import WeReadClient
 
 
@@ -73,6 +79,57 @@ def test_missing_next_cursor_is_not_history_exhaustion():
 def test_upstream_credentials_are_not_echoed():
     runner = Mock(return_value=CompletedProcess([], 1, "", "token=SECRET"))
     client = WeReadClient(binary="test", runner=runner)
-    with pytest.raises(SessionExpired) as exc:
+    with pytest.raises(ArchiveError) as exc:
         client.search("测试")
     assert "SECRET" not in str(exc.value)
+
+
+def test_start_reuses_a_valid_login_without_showing_qr(monkeypatch):
+    client, _ = client_with({"ok": True})
+    login = Mock()
+    monkeypatch.setattr("wechat_archive.login_ui.qr_login", login)
+    client.ensure_login()
+    login.assert_not_called()
+
+
+def test_start_logs_in_once_then_checks_connection(monkeypatch):
+    runner = Mock(
+        side_effect=[
+            CompletedProcess([], 1, "", json.dumps({"error": "no WeRead accounts are configured"})),
+            result({"ok": True}),
+        ]
+    )
+    client = WeReadClient(binary="test-client", runner=runner)
+    login = Mock(return_value=0)
+    monkeypatch.setattr("wechat_archive.login_ui.qr_login", login)
+    client.ensure_login(open_browser=False)
+    login.assert_called_once_with("test-client", open_browser=False, timeout=300)
+    assert runner.call_count == 2
+
+
+@pytest.mark.parametrize(
+    "error,exception",
+    [
+        ({"error": "verification", "errCode": -2041}, VerificationRequired),
+        ({"error": "too many requests", "status": 429}, RateLimited),
+        ({"error": "network unavailable"}, ArchiveError),
+    ],
+)
+def test_network_or_verification_does_not_launch_relogin(error, exception, monkeypatch):
+    runner = Mock(return_value=CompletedProcess([], 1, "", json.dumps(error)))
+    client = WeReadClient(binary="test-client", runner=runner)
+    login = Mock()
+    monkeypatch.setattr("wechat_archive.login_ui.qr_login", login)
+    with pytest.raises(exception):
+        client.ensure_login()
+    login.assert_not_called()
+
+
+def test_unattended_mode_never_launches_login(monkeypatch):
+    runner = Mock(return_value=CompletedProcess([], 1, "", json.dumps({"status": 401})))
+    client = WeReadClient(binary="test-client", runner=runner)
+    login = Mock()
+    monkeypatch.setattr("wechat_archive.login_ui.qr_login", login)
+    with pytest.raises(SessionExpired):
+        client.ensure_login(auto=False)
+    login.assert_not_called()
