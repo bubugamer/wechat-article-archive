@@ -5,11 +5,15 @@ from .errors import ArchiveError
 
 
 def article_url(url: str) -> str:
-    parsed = urlparse(url.strip())
+    try:
+        parsed = urlparse(url.strip())
+        port = parsed.port
+    except (AttributeError, TypeError, ValueError):
+        raise ArchiveError("微信原文链接格式不正确。") from None
     if (
         parsed.scheme != "https"
         or parsed.hostname != "mp.weixin.qq.com"
-        or parsed.port not in (None, 443)
+        or port not in (None, 443)
         or parsed.username
         or parsed.password
         or not (parsed.path == "/s" or parsed.path.startswith("/s/"))
@@ -31,11 +35,15 @@ def article_key(url: str) -> str:
 
 
 def same_origin(url: str) -> bool:
-    p = urlparse(url)
+    try:
+        p = urlparse(url)
+        port = p.port
+    except (TypeError, ValueError):
+        return False
     return (
         p.scheme == "https"
         and p.hostname == "mp.weixin.qq.com"
-        and p.port in (None, 443)
+        and port in (None, 443)
         and not p.username
         and not p.password
     )

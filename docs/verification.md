@@ -18,7 +18,7 @@
 
 ## 本地自动测试
 
-43 项测试通过，包括：
+45 项测试通过，包括：
 
 - 嵌套正文末尾、图片位置、发布时间和三种输出。
 - 验证页、删除页、空正文与可识别付费预览不保存为完整文章。
@@ -42,4 +42,4 @@
 
 ## 发布检查
 
-GitHub Actions 对 Python 3.11、3.12、3.13、3.14 执行代码检查、43 项测试、打包和安装后的命令检查。最新结果以 [Checks 页面](https://github.com/bubugamer/wechat-article-archive/actions/workflows/checks.yml) 为准；CI 不连接真实微信账号。
+GitHub Actions 对 Python 3.11、3.12、3.13、3.14 执行代码检查、45 项测试、打包和安装后的命令检查。最新结果以 [Checks 页面](https://github.com/bubugamer/wechat-article-archive/actions/workflows/checks.yml) 为准；CI 不连接真实微信账号。

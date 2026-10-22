@@ -73,6 +73,8 @@ def saved_article_exists(record: dict, output: Path) -> bool:
             return False
     try:
         data = json.loads((root / files["json"]).read_text(encoding="utf-8"))
+        saved_markdown = (root / files["md"]).read_text(encoding="utf-8")
+        saved_text = (root / files["txt"]).read_text(encoding="utf-8")
     except (OSError, ValueError):
         return False
     markdown = data.get("markdown")
@@ -82,6 +84,6 @@ def saved_article_exists(record: dict, output: Path) -> bool:
     digest = hashlib.sha256(markdown.encode()).hexdigest()
     return (
         digest == data.get("content_sha256") == record.get("content_sha256")
-        and (root / files["md"]).read_text(encoding="utf-8").endswith(markdown + "\n")
-        and (root / files["txt"]).read_text(encoding="utf-8") == text + "\n"
+        and saved_markdown.endswith(markdown + "\n")
+        and saved_text == text + "\n"
     )

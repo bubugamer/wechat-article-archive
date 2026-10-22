@@ -31,6 +31,8 @@ def test_nested_body_images_metadata_and_saved_outputs(original_html, tmp_path):
     assert metadata["text"] == article.text
     (tmp_path / saved["files"]["md"]).write_text("corrupted", encoding="utf-8")
     assert not saved_article_exists(saved, tmp_path)
+    (tmp_path / saved["files"]["md"]).write_bytes(b"\xff")
+    assert not saved_article_exists(saved, tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -54,6 +56,8 @@ def test_errors_are_not_articles(page, exception):
         "https://mp.weixin.qq.com.evil.test/s/a",
         "https://user:secret@mp.weixin.qq.com/s/a",
         "https://mp.weixin.qq.com:8443/s/a",
+        "https://mp.weixin.qq.com:bad/s/a",
+        "https://[broken/s/a",
         "https://mp.weixin.qq.com/cgi-bin/searchbiz",
         "https://mp.weixin.qq.com/s?foo=1",
     ],
